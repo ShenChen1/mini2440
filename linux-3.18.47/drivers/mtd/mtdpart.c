@@ -37,12 +37,18 @@
 static LIST_HEAD(mtd_partitions);
 static DEFINE_MUTEX(mtd_partitions_mutex);
 
+struct part_map{
+	uint32_t blk_num;	/* Logic block number */ 
+	uint32_t *blk_tbl;	/* Mapping from logic block to phys block */  
+};
+
 /* Our partition node structure */
 struct mtd_part {
 	struct mtd_info mtd;
 	struct mtd_info *master;
 	uint64_t offset;
 	struct list_head list;
+	struct part_map *map;
 };
 
 /*
@@ -63,6 +69,35 @@ static int part_read(struct mtd_info *mtd, loff_t from, size_t len,
 	struct mtd_part *part = PART(mtd);
 	struct mtd_ecc_stats stats;
 	int res;
+
+	stats = part->master->ecc_stats;
+	res = part->master->_read(part->master, from + part->offset, len,
+				  retlen, buf);
+	if (unlikely(mtd_is_eccerr(res)))
+		mtd->ecc_stats.failed +=
+			part->master->ecc_stats.failed - stats.failed;
+	else
+		mtd->ecc_stats.corrected +=
+			part->master->ecc_stats.corrected - stats.corrected;
+	return res;
+}
+
+static int part_read_only(struct mtd_info *mtd, loff_t from, size_t len,
+		size_t *retlen, u_char *buf)
+{
+	struct mtd_part *part = PART(mtd);
+	struct mtd_ecc_stats stats;
+	int res;
+	uint32_t logic, phys;
+
+	logic = from >> mtd->erasesize_shift;
+	if (logic >= part->map->blk_num)
+	{ 
+		*retlen = 0;  
+		return -EINVAL;  
+	}
+	phys = part->map->blk_tbl[logic];
+	from = phys << mtd->erasesize_shift | (from&(mtd->erasesize-1)); 
 
 	stats = part->master->ecc_stats;
 	res = part->master->_read(part->master, from + part->offset, len,
@@ -322,6 +357,103 @@ static inline void free_partition(struct mtd_part *p)
 	kfree(p);
 }
 
+static int part_create_partition_mapping(struct mtd_info *mtd)  
+{
+	struct mtd_part *part = PART(mtd);
+	struct part_map *map = NULL;
+	uint32_t offset = 0;
+
+	if (!part)  
+	{
+		printk("null mtd !\n");  
+		return -1;  
+	}
+	
+	if (strcmp("squashfs", mtd->name) && strcmp("cramfs", mtd->name))
+	{
+		return 0;
+	}
+ 
+	map = kmalloc(sizeof(struct part_map), GFP_KERNEL);  
+	if (!map)  
+	{  
+		printk ("memory allocation error while creating partitions mapping for %s\n", mtd->name);     
+		goto err;  
+	}  
+
+	map->blk_num = mtd->size >> mtd->erasesize_shift;
+	map->blk_tbl = kmalloc(sizeof(uint32_t) * map->blk_num, GFP_KERNEL);  
+	if (!map->blk_tbl)  
+	{  
+		printk ("memory allocation error while creating partitions mapping for %s\n", mtd->name);   
+		goto err;  
+	}
+	memset(map->blk_tbl, 0xFF, sizeof(uint32_t) * map->blk_num);  
+
+	/* Create partition mapping table */
+	for (map->blk_num = 0, offset = 0; offset < mtd->size; offset+= mtd->erasesize)  
+	{  
+		if (part_block_isbad(mtd, offset)) 
+		{
+			printk("part[%s]: Skip bad block at [0x%x]\n", mtd->name, offset);
+		}
+		else
+		{
+			map->blk_tbl[map->blk_num++] = offset >> mtd->erasesize_shift;    
+		}
+	}  
+
+	part->map = map;
+	mtd->_read = part_read_only;
+	
+	return 0;
+
+err:
+	if (map->blk_tbl)
+	{
+		kfree(map->blk_tbl); 
+	}
+	
+	if (map)
+	{
+		kfree(map); 
+	}
+	
+	return -1;
+}
+
+static int part_delete_partition_mapping(struct mtd_info *mtd)
+{
+	struct mtd_part *part = PART(mtd);
+	struct part_map *map = NULL;
+
+	if (!part)  
+	{
+		printk("null mtd !\n");  
+		return -1;  
+	}
+	
+	if (strcmp("squashfs", mtd->name) && strcmp("cramfs", mtd->name))
+	{
+		return 0;
+	}
+	
+	printk("part[%s]:Deleting partitions mapping\n", mtd->name);
+	map = part->map;
+	
+	if (map->blk_tbl)
+	{
+		kfree(map->blk_tbl); 
+	}
+	
+	if (map)
+	{
+		kfree(map); 
+	}
+	
+	return 0;
+}
+
 /*
  * This function unregisters and destroy all slave MTD objects which are
  * attached to the given master MTD object.
@@ -341,6 +473,7 @@ int del_mtd_partitions(struct mtd_info *master)
 				continue;
 			}
 			list_del(&slave->list);
+			part_delete_partition_mapping(master);
 			free_partition(slave);
 		}
 	mutex_unlock(&mtd_partitions_mutex);
@@ -656,7 +789,7 @@ int add_mtd_partitions(struct mtd_info *master,
 		mutex_unlock(&mtd_partitions_mutex);
 
 		add_mtd_device(&slave->mtd);
-
+		part_create_partition_mapping(&slave->mtd);
 		cur_offset = slave->offset + slave->mtd.size;
 	}
 

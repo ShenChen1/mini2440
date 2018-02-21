@@ -4,4 +4,6 @@ ifeq ($(CONFIG_PM_H1940),y)
 else
 	zreladdr-y	+= 0x30008000
 	params_phys-y	:= 0x30000100
+	initrd_phys-y	:= 0x00800000
+	#LOADADDR		:= 0x38000000
 endif

@@ -39,6 +39,7 @@
 #include <asm/mach-types.h>
 
 #include <mach/regs-gpio.h>
+#include <mach/regs-mem.h>
 #include <linux/platform_data/leds-s3c24xx.h>
 #include <mach/regs-lcd.h>
 #include <mach/irqs.h>
@@ -272,11 +273,12 @@ static struct mtd_partition mini2440_default_nand_part[] __initdata = {
 
 static struct s3c2410_nand_set mini2440_nand_sets[] __initdata = {
 	[0] = {
-		.name		= "nand",
+		.name		= "nandflash0",
 		.nr_chips	= 1,
 		.nr_partitions	= ARRAY_SIZE(mini2440_default_nand_part),
 		.partitions	= mini2440_default_nand_part,
 		.flash_bbt 	= 1, /* we use u-boot to create a BBT */
+		.disable_ecc	= 1,
 	},
 };
 
@@ -290,13 +292,32 @@ static struct s3c2410_platform_nand mini2440_nand_info __initdata = {
 };
 
 /* DM9000AEP 10/100 ethernet controller */
-
+#if 0
 static struct resource mini2440_dm9k_resource[] = {
 	[0] = DEFINE_RES_MEM(MACH_MINI2440_DM9K_BASE, 4),
 	[1] = DEFINE_RES_MEM(MACH_MINI2440_DM9K_BASE + 4, 4),
 	[2] = DEFINE_RES_NAMED(IRQ_EINT7, 1, NULL, IORESOURCE_IRQ \
 						| IORESOURCE_IRQ_HIGHEDGE),
 };
+#else
+static struct resource mini2440_dm9k_resource[] = {  
+	[0] = {  
+			.start = MACH_MINI2440_DM9K_BASE,  
+			.end   = MACH_MINI2440_DM9K_BASE + 3,  
+			.flags = IORESOURCE_MEM  
+	},  
+	[1] = {  
+			.start = MACH_MINI2440_DM9K_BASE + 4,  
+			.end   = MACH_MINI2440_DM9K_BASE + 7,  
+			.flags = IORESOURCE_MEM  
+	},  
+	[2] = {  
+			.start = IRQ_EINT7,  
+			.end   = IRQ_EINT7,  
+			.flags = IORESOURCE_IRQ | IORESOURCE_IRQ_HIGHEDGE,  
+	}  
+}; 
+#endif
 
 /*
  * The DM9000 has no eeprom, and it's MAC address is set by
@@ -631,6 +652,12 @@ static void __init mini2440_init(void)
 
 	printk(KERN_INFO "MINI2440: Option string mini2440=%s\n",
 			mini2440_features_str);
+
+	//for dm9000:loss packet
+	*((volatile unsigned int *)S3C2410_BWSCON) = 
+		(*(volatile unsigned int *)S3C2410_BWSCON & ~(3<<16)) | 
+		S3C2410_BWSCON_DW4_16 | S3C2410_BWSCON_WS4 | S3C2410_BWSCON_ST4;
+	*((volatile unsigned int *)S3C2410_BANKCON4) = 0x1f7c;
 
 	/* Parse the feature string */
 	mini2440_parse_features(&features, mini2440_features_str);

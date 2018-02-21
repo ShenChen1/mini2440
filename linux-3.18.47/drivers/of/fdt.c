@@ -26,6 +26,11 @@
 #include <asm/setup.h>  /* for COMMAND_LINE_SIZE */
 #include <asm/page.h>
 
+#define DEBUG	1
+#undef pr_debug
+#define pr_debug printk
+
+
 /*
  * of_fdt_limit_memory - limit the number of regions in the /memory node
  * @limit: maximum entries
