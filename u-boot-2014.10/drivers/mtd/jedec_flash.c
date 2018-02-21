@@ -350,6 +350,24 @@ static const struct amd_flash_info jedec_table[] = {
 		}
 	},
 #endif
+#ifdef CONFIG_SYS_FLASH_LEGACY_1Mx16
+   {
+		.mfr_id		= 0xf0,
+		.dev_id		= 0xea00,
+		.name		= "SST39VF1601",
+		.uaddr		= {
+			[0] = MTD_UADDR_0x5555_0x2AAA, /* x8 */
+			[1] = MTD_UADDR_0x5555_0x2AAA /* x16 */
+		},
+		.DevSize	= SIZE_2MiB,
+		.CmdSet		= P_ID_AMD_STD,
+		.NumEraseRegions= 2,
+		.regions	= {
+			ERASEINFO(0x1000,256),
+			ERASEINFO(0x1000,256),
+		}
+	},
+#endif
 };
 
 static inline void fill_info(flash_info_t *info, const struct amd_flash_info *jedec_entry, ulong base)
@@ -404,7 +422,7 @@ static inline void fill_info(flash_info_t *info, const struct amd_flash_info *je
 
 		total_size += erase_region_size * erase_region_count;
 		debug("erase_region_count = %ld erase_region_size = %ld\n",
-		       erase_region_count, erase_region_size);
+			   erase_region_count, erase_region_size);
 		for (j = 0; j < erase_region_count; j++) {
 			if (sect_cnt >= CONFIG_SYS_MAX_FLASH_SECT) {
 				printf("ERROR: too many flash sectors\n");
@@ -432,7 +450,7 @@ int jedec_flash_match(flash_info_t *info, ulong base)
 
 	for (i = 0; i < ARRAY_SIZE(jedec_table); i++) {
 		if ((jedec_table[i].mfr_id & mask) == (info->manufacturer_id & mask) &&
-		    (jedec_table[i].dev_id & mask) == (info->device_id & mask)) {
+			(jedec_table[i].dev_id & mask) == (info->device_id & mask)) {
 			fill_info(info, &jedec_table[i], base);
 			ret = 1;
 			break;

@@ -49,6 +49,9 @@ config TARGET_VCMA9
 config TARGET_SMDK2410
 	bool "Support smdk2410"
 
+config TARGET_MINI2440
+	bool "Support mini2440"
+
 config TARGET_INTEGRATORAP_CM926EJS
 	bool "Support integratorap_cm926ejs"
 
@@ -661,6 +664,7 @@ source "board/ronetix/pm9261/Kconfig"
 source "board/ronetix/pm9263/Kconfig"
 source "board/ronetix/pm9g45/Kconfig"
 source "board/samsung/smdk2410/Kconfig"
+source "board/mini2440/Kconfig"
 source "board/sandisk/sansa_fuze_plus/Kconfig"
 source "board/scb9328/Kconfig"
 source "board/schulercontrol/sc_sps_1/Kconfig"
